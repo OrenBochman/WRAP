@@ -1,0 +1,1042 @@
+---
+title: "WARP - The Wikipedia Api R-Package"
+author: "Oren Bochman"
+date: "Monday, August 04, 2014"
+output: html_document   
+---
+
+* TODO
+ * Get a catagory hierarchy.
+ * Get all articles names in a catagory.
+ * Create a page and write a data frame to it.
+
+This package is a library of R functions for use in research settings with the wikipedia API
+
+The primary goals are
+1. access wikipedia page collection from R corpus for text processing
+2. identify ego and other social networks in editor acticity
+
+wikipedia api should include:
+-----------------------------
+#. [get site metadata](https://www.mediawiki.org/wiki/API:Meta)
+#. [login](https://www.mediawiki.org/wiki/API:Login) (done)
+#. [logout](https://www.mediawiki.org/wiki/API:Logout) (done)
+#. [account creation](https://www.mediawiki.org/wiki/API:Account_creation)
+#. get text of page (done)
+#. get page metadate inc list of revisions.
+#. get text of a revision (done)
+#. gen revision diffs
+#. User's metadata e.g. gender. (done)
+#. get the metadate on revisions of a page
+#. get the catagories an articles (done)
+#. get the members of a catagory (done)
+#. gen a biprtite graphs for editors and pages based on edit limits
+#. Add(done)/Replace/Remove text to a page.
+#. Create a user 
+#. Manage a user's watchlist
+#. [Enforce query delay and limts](https://www.mediawiki.org/wiki/API:Lists#Limits)
+#. process a page (done)
+#. parse talk pages to a tree.
+#. [parsing wikitext](https://www.mediawiki.org/wiki/API:Parsing_wikitext)
+#. expanding templates
+#. List template on a page (done)
+#. list user/info boxes/images on a page
+#. list pages a [user box]/[image]/template is on.
+#. use the api to render wiki text
+#. recent changes. (for breaking news etc)
+#. support continuing queries on lists
+#. support more generators as needed
+#. support editing with a bot/loged in flag
+
+Wikidata API & dbase
+--------------------
+#. [access wikidata via api](https://www.wikidata.org/w/api.php)
+#. [access to database via ssh](https://wikitech.wikimedia.org/wiki/Nova_Resource:Tools/Help#Configuring_MySQL_Workbench) [and] (http://foro.carajal.info/?p=655) [or](http://stackoverflow.com/questions/2226867/can-r-read-from-a-file-through-an-ssh-connection)
+#. access statistics
+
+demo apps
+---------
+#. Talk page Anlysis & Visulization. 
+##. read
+##. parse
+###. subpage/archive
+###. section == 
+###. indents + resets
+###. signatures
+##. analyze h-Metric, longest chain, etc
+##. Visulize tree
+#. create & anlysis of a bipartite editor-article graph.
+#. social networks of editors.
+#. neutraility checks.
+#. detection of breaking news.
+#. generation of infographic including maps.
+
+tasks
+----
+#. config file - store user, pass, uri, proxy, usage limits. 
+#. create a genenral puropse post function that
+##. gets tokens
+##. can get a uri
+##. respects usage limits (rate and query size)
+##. supports a continuing query loop
+##. gets a processing directive (or defers)
+
+Setup
+=====
+```{r house keeping, echo=FALSE, cache=FALSE}
+Sys.getlocale()
+#Sys.setlocale("LC_ALL", 'he_IL.UTF-8')
+# Clear the previously used libraries
+rm(list=ls())
+
+#set working directory
+setwd("~/R/markdown/WRAP")
+
+#install the necessary packages
+pkgLoad <- function(x)
+{
+    if (!require(x,character.only = TRUE))
+    {
+      install.packages(x,dep=TRUE, repos='http://star-www.st-andrews.ac.uk/cran/')
+      if(!require(x,character.only = TRUE)) stop("Package not found")
+    }
+}
+
+#lazy load required libraries
+pkgLoad("RCurl")
+pkgLoad("XML")
+pkgLoad("RJSONIO")
+pkgLoad("wordcloud")
+pkgLoad("tm")
+#pkgLoad("jsonlite")
+
+#globals objects
+
+#create the handle
+h = getCurlHandle()
+
+#debugging support
+dfun <-function(msg, topic, curl){
+  cat(topic, ":", length(msg), "\n")
+  
+}
+
+#set curl options
+ curlSetOpt(
+  cookiejar="cookies.txt",    #store cookies, 
+  useragent = "WRAP Speed 1.0",  #define the user agent
+  followlocation = TRUE,      #continuing queries
+  ssl.verifypeer = FALSE,     #don't verify server cert
+  
+  # proxy=proxy,           #"136.233.91.120",
+  # proxyusername=name,    #"mydomain\\myusername",  
+  # proxypassword=pass,    #'whatever',
+  # proxyport=port         #8080 
+  
+  verbose = TRUE,             #debug 
+ # debugfunction = dfun,          
+  curl=h                      #handle is required
+  )
+
+setApiUri<-function(project,lang=""){
+  if( nchar(lang)==0){
+    uri=paste("https://www.",project,".org/w/api.php",sep = "")
+  }else{
+    uri=paste("https://",lang,".",project,".org/w/api.php",sep = "")
+  }
+  return(uri)
+}
+
+#api="https://www.wikidata.org/w/api.php"
+#api="https://en.setApiUri.org/w/api.php"
+
+api<-setApiUri(project="wikipedia",lang="en")
+```
+
+Process Data
+============
+```{r process JSON}
+processJSON<-function(doc){
+  result = tryCatch({
+  fromJSON(I(doc))   #simplify = StrictLogical + StrictNumeric)         #json document
+}, warning = function(w) {
+    #warning-handler-code
+    #print(paste("warning",w))
+  
+}, error = function(e) {
+    #error-handler-code
+    print(paste("warning",e)) 
+    res=""
+}, finally = {})
+  return(result)
+}#END tryCatch
+
+res=processJSON('[ [true, false, true], [1, 3, 4.15],["a", "b", "def" ] ]')
+```
+```{r process XML}
+processXML<-function(doc,xpath,attribute){
+  result = tryCatch({  
+  res =xmlInternalTreeParse(doc, trim = TRUE)
+  res<- xpathApply(res,xpath)[[1]]
+  
+  if(nchar(attribute)){
+      res <-xmlAttrs(res)[attribute][[1]]
+  }
+#    res<-xmlAttrs(res)
+#    if(attribute %in% res ){#check attrib is in list
+#      res <-res[attribute][[1]]
+#    }else{
+#      e<-simpleError("attribute not found")
+#      signalCondition(e)
+#    }
+#  }
+
+  }, warning = function(w) {
+    #warning-handler-code
+    #print(paste("warning",w))
+  }, error = function(e) {
+    #error-handler-code
+    print(paste("warning",e)) 
+}, finally = {
+ 
+})
+return(result)
+}#END tryCatch
+
+testXml='<api><edit result="Success" pageid="16283969" title="Wikipedia:Sandbox" contentmodel="wikitext" oldrevid="621914847" newrevid="621916124" newtimestamp="2014-08-19T13:57:23Z"/></api>'
+print(processXML(doc=testXml,"//api/edit","contentmodel"))
+```
+Login
+=====
+```{r login,cache=FALSE}
+wmLogin<-function(uri=setApiUri(project="mediawiki"),login,password,.opts,curl){    
+  #set login form parameters
+  pars = list(action="login",  
+            lgname=login,
+            lgpassword=password,
+            format="xml")
+  #step 1 login
+  x1=postForm(uri=uri,.opts=.opts,.params=pars,curl=curl) 
+  #extract token attrib
+  token<-processXML(doc=x1,xpath="//api/login",attribute="token")
+  
+  #step 2 login check
+  pars  <-c(pars,lgtoken=token)           
+  #add token to request
+  x2=postForm(uri=uri,.params=pars,style="post",curl=h)
+  #extract result attrib  
+  result<-processXML(doc=x2,xpath="//api/login",attribute="result")
+
+  retValue <- list(result=result,token=token)
+  if(result!="Success")
+    print(paste("login failed with message",result))
+  return(retValue)
+}
+
+dbg = debugGatherer()
+res=wmLogin(uri=setApiUri(project="mediawiki"),"P-value","12345678",h,.opts=c(debugfunction = dbg$update, verbose = TRUE))
+info = dbg$value(ordered = TRUE)
+table(names(info))
+info$DATA_OUT
+res["result"]
+```
+Get Tokens
+----------
+```{r get tokens}
+#  can be one of :"block|centralauth|delete|deleteglobalaccount|edit|email|import|move|options|patrol|protect|setglobalaccountstatus|unblock|watch",
+getTokens<-function(uri=setApiUri(project="mediawiki"),curl)
+  {
+  .params<-list(action="tokens",format="xml")
+  #.opts<-curlOptions(curl=curl)  
+  #get edit token
+  doc=postForm(uri=uri,.params=.params,curl=curl,style="post")
+  editToken<-processXML(doc=doc,xpath="//api/tokens",attribute="edittoken")
+  return(editToken)
+}
+editToken=getTokens(uri=setApiUri(project="mediawiki"),h)
+print(editToken)
+```
+
+Add a new Section
+=================
+c.f. [edit api](https://www.mediawiki.org/wiki/API:Edit)
+```{r edit new section,cache=FALSE}
+#'@description
+#'addNewSection creates a new section
+addNewSection<-function(uri=setApiUri(project="mediawiki"),
+                        title="Project:Sandbox",                   
+                        sectiontitle="sectiontitle",
+                        section="new",
+                        summaryText="summaryText",
+                        text="text",
+                        editToken,
+                        curl)
+  {
+  #perfom the edit using these parameters
+  editPars = list(
+    action="edit",
+    title=title,
+    section=section,          
+    sectiontitle=sectiontitle,
+    watchlist="preferences",
+    summary=summaryText, 
+    text=text,
+    bot="",
+    minor="",
+    format="xml",
+    token=editToken
+    )#add token to request
+  
+  x1=postForm(uri=uri,.params=editPars,style="httppost",curl=curl) #edit
+  result=processXML(doc=x1,xpath="//api/edit",attribute="result") #the session token
+     
+  #todo handle errors and check for edit conflicts
+  if(result!="Success") 
+    print(paste("edit failed with message",result))
+  return(c(result=result,doc=xmlInternalTreeParse(x1), trim = TRUE))
+}
+sectionTitle=paste("==WRAP Test ",Sys.time(),"==")
+
+res=addNewSection(
+  uri=setApiUri(project="mediawiki"),
+  title="Project:Sandbox",
+  sectiontitle=sectionTitle ,
+  section="new",
+  summaryText="WRAP test edit via addNewSection() - use R!",
+  text="Hello World MW api\n\n",
+  editToken=editToken,
+  curl=h
+  )
+
+print(res)
+```
+edit section
+------------
+```{r edit section}
+addText<-function(uri=setApiUri(project="mediawiki"),
+                  title="Project:Sandbox",
+                  sectiontitle,
+                  section=0,
+                  summaryText,
+                  appendtext="text",
+                  editToken,
+                  curl){
+#perfom the edit using these parameters
+  editPars = list(
+    action="edit",
+    title=title,
+    section=section,
+    sectiontitle=sectiontitle,
+    watchlist="preferences",
+    summary=summaryText,
+    appendtext=appendtext,
+    bot="",
+    minor="",
+    format="xml",
+    token=editToken )#add token to request
+  
+  x1=postForm(uri=uri,.params=editPars,style="httppost",curl=curl) #edit
+  #parse the result
+  #
+  #edit  <- xpathApply(doc, "//api/edit")[[1]]  
+  #result <-xmlAttrs(edit)["result"][[1]]     #the session token
+  result=processXML(doc=x1,xpath="//api/edit",attribute="result")  
+   
+   #todo handle errors and check for edit conflicts
+  if(result!="Success") print(paste("edit failed with message",result))
+  return(xmlInternalTreeParse(x1, trim = TRUE))
+}
+#append text to page
+res=addText(uri=setApiUri(project="mediawiki"),
+            title="Project:Sandbox",
+            sectiontitle=sectionTitle,
+            section="0",
+            summaryText="WRAP test edit via addText() - use R!",
+           # appendtext="::{{Please leave this line alone and write below (this is the coloured heading)}}\nAdding text via addText()\n\n",
+            appendtext="\n\nAdding text via addText()\n\n",           
+            editToken=editToken,
+            curl=h)
+print(res)
+```
+User information
+================
+```{r user info}
+getUserInfo<-function(userNameList,
+                      userPropList,
+                      curl)
+{
+  responseFormat="json" #|"xml"
+  editPars = list(action="query",list="users",  
+                  ususers=paste(userNameList, collapse = "|"),
+                  usprop=paste(userPropList, collapse = "|"),
+                  format=responseFormat)
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) #query
+  
+  if(responseFormat=="xml")                       #parse the result  
+  {          
+    doc=xmlInternalTreeParse(x1, trim = TRUE)
+  }else{
+    doc<-processJSON(doc=x1)
+  }  
+  return(doc)
+}
+properties = c("blockinfo",
+      #        "groups","implicitgroups","rights",
+                "editcount","registration",
+               "emailable","gender")
+
+res=getUserInfo(userNameList=c("Jimbo Wales","OrenBochman"),
+                userPropList=properties,
+              curl=h)
+print(res)
+#print(res$query$users[[1]]$userid)
+#print(res$query$users[[1]]$name)
+#print(res$query$users[[1]]$editcount)
+#print(res$query$users[[1]]$registration)
+#print(res$query$users[[1]]$gender)
+```
+Processing Catagories
+=====================
+Categories of a pages
+---------------------
+```{r categories in a page}
+getPageCats<-function(pageList,
+                      properties,
+                      showHidden="FALSE",
+                      limit="50",
+                      curl)
+{  
+  responseFormat="json" #not "xml"
+  #perform the query using these parameters
+  
+  clshow = "!hidden"
+  if(showHidden=="TRUE"){
+  clshow = "hidden"    
+  }
+  editPars =list(
+    action ="query",
+    prop   ="categories",                      #get categories
+    titles =paste(pageList, collapse = "|"),   #pages
+    clprop =paste(properties, collapse = "|"), #properties
+    limit  =limit,
+    clshow =clshow,
+    cllimit=limit,              
+    format =responseFormat
+    )
+  
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) 
+  doc<-processJSON(x1) 
+  return(doc)
+}
+pages<-c("Early life and career of Barack Obama",
+         "Illinois Senate career of Barack Obama")
+
+catRes=getPageCats(
+  pageList=pages,                   
+  properties= c("sortkey","timestamp","hidden"),
+  curl=h)
+
+#print(catRes)
+```
+
+
+
+```{r query_cat}
+query_cat <-function(uri,
+                     prefix,
+                     result_format="json",
+                     limit="30",
+                     accontinue="",
+                     curl=curl)
+{
+  
+    formPars =list(
+    action="query",
+    list="allcategories",
+    acprop="size",
+    acprefix=prefix,   
+    acdir = "ascending",
+    aclimit=limit ,
+    accontinue= accontinue,
+    format  = result_format,
+
+      
+      
+    action ="query",
+    prop   ="categories",                      #get categories
+    titles =paste(pageList, collapse = "|"),   #pages
+    clprop =paste(properties, collapse = "|"), #properties
+
+    clshow =clshow,
+    cllimit=limit,              
+    format =responseFormat
+    )
+
+  
+  ## use RCurl to access the api
+  raw_data<-postForm(
+    uri=uri,
+    .pars=formPars,
+    curl=curl)
+  
+  #return(raw_data)  
+  #parse the results using fromJason
+  #data<- fromJSON(raw_data,encoding="utf-8",simplifyWithNames = TRUE)
+  data<- fromJSON(raw_data,simplify=TRUE)
+  #todo2: we want the query subtree 
+  return(data)               
+}
+
+#use open search with the queary SQL
+query_cat_example<-query_cat(
+  uri=setApiUri(project="mediawiki"),
+  "API:Main_page",
+  curl=curl)
+#display the results
+#note there is one exact match and servral partial matches
+query_cat_example[["query-continue"]][["allcategories"]][["accontinue"]]
+
+query_cat_example[["query"]][["allcategories"]][[1]][["*"]]
+query_cat_example[["query"]][["allcategories"]][[1]][1]
+#query_cat_example[["query"]][["allcategories"]][[2]][["*"]]
+#query_cat_example[["query"]][["allcategories"]]
+#sapply(query_cat_example[["query"]][["allcategories"]],[1])
+
+query_example <- postForm(
+  "http://en.wikipedia.org/w/api.php", 
+  prop="revisions",
+  rvprop="content",
+  action  = "query", 
+  titles  = "SQL", 
+  format  = "json",
+  rvexpandtemplates="",
+  rvlimit="1",
+  rvdir="older"
+)
+
+#query_example
+#cat(fromJSON(rawToChar(query_example)))
+#toJSON(list(list(1,2,3),1,2,4:5))
+```
+Members of a category
+---------------------
+```{r category members}
+getCatMembers<-function(catList,
+                        properties,
+                        type = c("page","subcat","file"),
+                        showHidden="FALSE",
+                        limit="50",
+                        curl)
+{  
+  responseFormat="json" #not "xml"
+  #perform the query using these parameters
+  
+  clshow = "!hidden"
+  if(showHidden=="TRUE"){
+  clshow = "hidden"    
+  }
+  
+  editPars =list(
+    action ="query",
+    list="categorymembers",
+    prop   ="categories",                      #get categories
+    cmtitle=paste(catList,    collapse = "|"), #pages
+    cmprop =paste(properties, collapse = "|"), #properties
+    cmtype =paste(type,       collapse = "|"), #properties
+    cmlimit=limit,            
+    format =responseFormat
+    )
+  
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) 
+  
+  doc<- fromJSON(x1, simplifyVector = FALSE)     
+  return(doc)
+}
+categories<-c("Category:Ebolaviruses")
+
+catRes=getCatMembers(  
+  catList=categories,                   
+  properties= c("title",
+                #"id",
+                "sortkey",
+                "sortkeyprefix",
+                "type",
+                "timestamp"),
+  type      = c("page","subcat","file"),
+  curl=h)
+
+print(catRes$query$categorymembers[[1]])
+```
+Processing Articles
+===================
+
+```{r artlist}
+titles_short<-list(
+  "Barack Obama")
+
+titles_long<-list(
+  "War in Afghanistan (2001–present)",
+  "Barack Obama",
+  "Iraq War",
+  "Family of Barack Obama",
+  "Early life and career of Barack Obama",
+  "Illinois Senate career of Barack Obama",
+  "United States Senate career of Barack Obama",
+  "List of bills sponsored by Barack Obama in the United States Senate",
+  "United States presidential election, 2008",
+  "Barack Obama presidential primary campaign, 2008",
+  "Barack Obama presidential campaign, 2008",
+  "United States presidential election, 2012",
+  "Barack Obama presidential campaign, 2012",
+  "Presidency of Barack Obama",
+  "List of presidential trips made by Barack Obama",
+  "Confirmations of Barack Obama's Cabinet",
+  "Barack Obama social policy",
+  "Economic policy of Barack Obama",
+  "Health care reform in the United States",
+  "Foreign policy of the Barack Obama administration",
+  "United States Senate elections, 2010",
+  "Public image of Barack Obama",
+  "2011 military intervention in Libya",
+  "Death of Osama bin Laden",
+  "United States House of Representatives elections, 2010",
+  "International reactions to the United States presidential election, 2012",
+  "International media reaction to the United States presidential election, 2008",
+  "First 100 days of Barack Obama's presidency",
+  "2009 Nobel Peace Prize",
+  "Timeline of the presidency of Barack Obama (2009)",
+  "Second inauguration of Barack Obama",
+  "First inauguration of Barack Obama",
+  "Assassination threats against Barack Obama",
+  "Barack Obama assassination plot in Denver",
+  "Barack Obama assassination plot in Tennessee",
+  "2013 Albany death ray plot",
+  'Barack Obama "Hope" poster',
+  "Michelle Obama",
+  "Illinois' 1st congressional district election, 2000",
+  "Hilda Solis",
+  "Sonia Sotomayor",
+  "Citizen's Briefing Book",
+  "Barack Obama on social media",
+  "City of Blinding Lights",
+  "2004 Democratic National Convention",
+  "Rod Blagojevich corruption charges",
+  "There's No One as Irish as Barack O'Bama",
+  "A New Beginning",
+  "Don't Ask, Don't Tell Repeal Act of 2010",
+  "PRISM (surveillance program)"
+  )
+```
+Getting Article Text
+====================
+1. Render + Title
+-----------------
+
+this is a quick and simple solution which by-passes the API.
+
+```{r page, echo=TRUE, cache=FALSE}
+
+get_page<-function(query, 
+                   wiki="https://en.wikipedia.org",
+                   debug=FALSE,
+                   .opts= list(followlocation=TRUE,
+                               ssl.verifypeer=FALSE ) )
+  {  
+  #if file exists and load it instead.
+  file_name<-paste("./scratch/",query,".html",sep="")
+  if(file.exists(file_name)){
+      out <- paste(readLines(file_name), collapse=" ")
+    #  out<-readChar(file_name, file.info(file_name)$size)
+    #  out<-readBin(file_name, file.info(file_name)$size)      
+     if(debug)
+       print(paste("read ",file_name,"from local storage"))
+    #out=scan(f_name("./scratch",what="character",encoding="UTF-8"))
+      return(out)
+} else {
+  query_esc<-curlEscape(query)
+  custom_uri<-paste(wiki, "/w/index.php",collapse= NULL)        #other wikis
+  write(custom_uri)
+  out<-getForm(uri="https://en.wikipedia.org/w/index.php",
+               action="render", 
+               title = query,
+               .opts = .opts)                                   #call rcurl
+   return(out)
+  }
+}
+
+titles<-titles_long[1:3]
+#titles<-titles_long
+#generate html filenames
+obama_fnames_htm <- lapply(titles, 
+                           function(x){paste(x,"html",sep=".")})
+#generate txt filenames
+obama_fnames_txt <- lapply(titles, 
+                           function(x){paste(x,"txt",sep=".")})
+
+#get the articles
+obama_docs_htm <- lapply(titles, 
+                         get_page)
+
+html_to_txt<- function(x){
+  
+  #parse the html
+  html <- htmlTreeParse(x,useInternal=TRUE,asText=TRUE) 
+  
+  #XPATH filters
+  pre     <-"//body//text()"
+  script  <-"[not(ancestor-or-self::script or ancestor-or-self::style or ancestor-or-self::tr)]"
+  toc     <-"[not(ancestor::div[(@class='toc')])]"
+  dab_lnk <-"[not(ancestor::*[(@class='dablink')])]"
+  nav_box <-"[not(ancestor::*[starts-with(@class, 'navbox')])]"
+  inf_box <-"[not(ancestor::*[starts-with(@class, 'infobox')])]"
+  edt_lnk <-"[not(ancestor::span[(@class='mw-editsection')])]"
+  cite_ndd<-"[not(ancestor::span[(@class='Template-Fact')])]"
+  citation<-"[not(ancestor::span[starts-with(@class, 'citation')])]"  
+  refs    <-"[not(ancestor::*[starts-with(@class, 'reference')])]" 
+  ipa     <-"[not(ancestor::span[starts-with(@class, 'IPA')])]"
+  relates <-"[not(ancestor::div[(@class='rellink relarticle mainarticle')])]"
+  thumb   <-"[not(ancestor::img[(@class='thumbimage')])]"
+   
+  xpath<-paste(pre,script,toc,dab_lnk,nav_box,inf_box,edt_lnk,cite_ndd,citation,
+                refs,ipa,relates,thumb,sep="")
+  #extract the text
+  txtVector <- xpathApply(html,xpath,xmlValue) #sessionEncoding ="utf8"
+  txt<-paste(txtVector, collapse = " ")
+  #txt<-iconv(txt, "CE_NATIVE", "UTF-8")  
+}
+
+obama_docs_txt<-lapply(obama_docs_htm, html_to_txt)
+
+#make an html corpus
+obama_corpus_htm <- VCorpus(
+  VectorSource(obama_docs_htm),
+  readerControl = list(reader = readPlain,
+                       language = "en"))
+
+#make a txt corpus
+obama_corpus_txt <- VCorpus(
+  VectorSource(obama_docs_txt),
+  readerControl = list(reader = readPlain,
+                       language = "en"))
+
+#obama_corpus <- Corpus(VectorSource(obama_docs,encoding="UTF-8"),readerControl = list(reader = readXML,language = "en"))
+#summary(obama_corpus)
+#obama_corpus <- tm_map(obama_corpus, as.PlainTextDocument)
+
+convertCommmas <- function(x) gsub(",", " PUNC_COMMA ", x)
+convertDot <- function(x) gsub("\\. ", " PUNC_PERIOD ", x)
+convertQuestion <- function(x) gsub("[?]", " PUNC_QUESTION ", x)
+convertDash <- function(x) gsub("[-—–‒―]+", " PUNC_DASH ", x)
+convertQuotes <- function(x) gsub("[“‘’”'\"]", " PUNC_QUOTE ", x)
+
+myStopwords <- c(stopwords('english'), 
+                 "also", "th", "nd", "st",
+                 "PUNC_COMMA", "PUNC_DASH","PUNC_PERIOD","PUNC_QUESTION","PUNC_QUOTE")
+
+clean<- function(corpus_txt){
+  #change case
+  corpus_txt <- tm_map(corpus_txt, tolower)
+  #remove numbers
+  corpus_txt <- tm_map(corpus_txt, removeNumbers)
+  
+  #before running the regex preprocess to add spaces
+  #and convert puntuation to browncorpus markup
+  
+  # corpus_txt <- tm_map(corpus_txt, convertCommmas)
+  # corpus_txt <- tm_map(corpus_txt, convertDot)
+  # corpus_txt <- tm_map(corpus_txt, convertQuestion)
+  corpus_txt <- tm_map(corpus_txt, convertDash)
+  # corpus_txt <- tm_map(corpus_txt, convertQuotes)
+  corpus_txt <- tm_map(corpus_txt, removePunctuation)
+  corpus_txt <- tm_map(corpus_txt, removeWords, myStopwords)  #remove stop words
+  corpus_txt <- tm_map(corpus_txt, stripWhitespace)           #remove white space
+
+ 
+ #store copy of unstemmed
+ #unstem_dict<- Dictionary(TermDocumentMatrix(corpus_txt,                                          
+ #   control = list(bounds =list(global = c(5,Inf) ) ) ) ) 
+ #stemming
+ #  corpus_txt <- tm_map(corpus_txt, stemDocument)
+
+ #stem completion - replaces conflated froms with the full form
+ # corpus_txt <- tm_map(corpus_txt,stemCompletion, 
+ #                       dictionary = unstem_dict, 
+ #                       type="first")
+  return(corpus_txt)}#clean
+
+
+#clean up the corpus
+#obama_corpus_txt<-clean(obama_corpus_txt)
+
+#store corpus files
+#writeCorpus(obama_corpus_htm,path="./scratch",filenames=obama_fnames_htm)
+#writeCorpus(obama_corpus_txt,path="./scratch",filenames=obama_fnames_txt)
+
+#head(q)
+```
+2. api - parse
+-----------------
+```{r parse}
+
+#gets all the properties!
+get_page_parse<-function(query,   rvlimit = 1,
+                        wiki="https://en.wikipedia.org",
+                       .opts   = list(followlocation = TRUE,
+                                 cookiejar=".\\temp\\cookies.txt",
+                                 cookie="token=385750348c88a116a24b93e83d491191",
+                                 ssl.verifypeer=FALSE
+                             )
+                ){
+    #support other wikis
+    uri=paste(wiki, "/w/api.php",sep="")
+out<-postForm( uri         = uri,
+               action      = "parse",
+               page        = query,
+               prop        = "text|langlinks|languageshtml|categories|categorieshtml|links|templates|images|externallinks|sections|revid|displaytitle|headitems|headhtml|iwlinks|wikitext|properties",                                            
+               format      = "xml",
+               .opts=.opts
+    )
+  page=xmlParse(out)
+    
+  text=getNodeSet(page, "//text")
+  langlinks=getNodeSet(page, "//langlinks")
+  languageshtml =getNodeSet(page, "//languageshtml")
+  categories=getNodeSet(page, "//categories")
+  categorieshtml =getNodeSet(page, "//categorieshtml")
+  links=getNodeSet(page, "//links")
+  templates=getNodeSet(page, "//templates")
+  images=getNodeSet(page, "//images")
+  externallinks=getNodeSet(page, "//externallinks")
+  sections=getNodeSet(page, "//sections")
+  headitems=getNodeSet(page, "//headitems")
+  headhtml =getNodeSet(page, "//headhtml")
+  iwlinks=getNodeSet(page, "//iwlinks")
+  wikitext =getNodeSet(page, "//wikitext")
+  properties=getNodeSet(page, "//properties")
+  
+  res<-list(text,langlinks,languageshtml,
+            categories,categorieshtml,
+            links,templates,images,externallinks,sections,
+            headitems,headhtml,iwlinks,wikitext,properties)
+  return( res)
+    
+}
+
+q<-get_page_parse("The A-Team")
+#q
+```
+3 - revision
+------------
+```{r revision}
+
+
+get_page_revision<-function(query,
+                       rvlimit = 1,
+                  .opts   = list(followlocation = TRUE,
+                                 cookiejar=".\\temp\\cookies.txt",
+                                 cookie="token=385750348c88a116a24b93e83d491191",
+                                 ssl.verifypeer=FALSE
+                             )
+                ){
+
+out<-postForm("https://en.wikipedia.org/w/api.php",
+               action      = "query",             
+               prop        = "revisions",
+               rvprop      = "content",              
+               redirects   = "1", 
+               titles      = query,
+
+               format      = "xml",
+               rvlimit = rvlimit,
+               rvparse=TRUE,            
+               .opts=.opts
+               
+               
+    )
+#rvgeneratexml=TRUE,
+#rvexpandtemplates=TRUE,
+#rvparse=TRUE,              
+#rvsection = 1,
+page=xmlParse(out)
+nodes=getNodeSet(page, "//rev")
+}
+
+q<-get_page_revision("The A-Team")
+#q[[1]]
+
+```
+
+
+```{r set header,cache=FALSE}
+setHeader<-function(header ,curl){
+#use this to set a custom header
+  curlSetOpt( .opts =  
+                list(
+                  httpheader = c(
+                  Date = "Wed, 1/2/2000 10:01:01", 
+                  foo="abc\n    extra line"),
+                  verbose = TRUE),
+              curl=h)
+}
+```
+templates
+=========
+get templates on a page
+-----------------------
+
+```{r templates used in a page}
+getPageTemplates<-function(pageList,
+                      properties,
+                      showHidden="FALSE",
+                      limit="50",
+                      curl)
+{  
+  responseFormat="json" #not "xml"
+  #perform the query using these parameters
+  
+  clshow = "!hidden"
+  if(showHidden=="TRUE"){
+  clshow = "hidden"    
+  }
+  editPars =list(
+    action ="query",
+    generator   ="templates",                  #get categories
+    titles =paste(pageList, collapse = "|"),   #pages
+    #clprop =paste(properties, collapse = "|"), #properties
+   # export,
+    format =responseFormat
+    )
+  
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) 
+  doc<-processJSON(x1) 
+  return(doc)
+}
+pages<-c("API")
+
+TemplatesRes=getPageTemplates(
+  pageList=pages,                   
+  properties= c("sortkey","timestamp","hidden"),
+  curl=h)
+
+print(TemplatesRes)
+```
+wikitext
+--------
+```{r templates expans}
+expandWikitext<-function(text,
+                         page="",
+                         properties,
+                         curl)
+{  
+  responseFormat="xml" #not "json"
+  
+  #perform the query using these parameters
+  editPars =list(
+    action ="expandtemplates",
+    text   =text,                  #wikitext
+    title  =page,                  #pretend to be a page
+    prop   =paste(properties, collapse = "|"), #properties   
+    format =responseFormat
+    )
+  
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) 
+ # doc<-processJSON(x1) 
+  return(x1)
+}
+
+expansionRes=expandWikitext(
+  text="{{Please leave this line alone (sandbox heading)}}",
+  page="Wikipedia:Sandbox",
+  prop=c("text"),
+  curl=h)
+
+print(expansionRes)
+```
+parse wikitext
+--------------
+```{r parse wikiext}
+parseWikitext<-function(text,
+                         title="API",
+                         properties,                        
+                         curl)
+{  
+  responseFormat="xml" #not "json"
+  
+  #perform the query using these parameters
+  editPars =list(
+    action ="parse",
+    text   =text,                  #wikitext
+    title  =title,                  #pretend to be a page
+    prop   =paste(properties, collapse = "|"), #properties
+    disablepp ="TRUE",
+    generatexml="FALSE",
+    contentmodel="wikitext",
+    format =responseFormat
+    )
+  
+  x1=postForm(uri=api,.params=editPars,style="post",curl=curl) 
+ # doc<-processJSON(x1) 
+  return(x1)
+}
+pages<-c("API")
+
+properties=c("text","langlinks","categories","categorieshtml","languageshtml","links","templates","images","externallinks","sections","revid","displaytitle","headitems","headhtml","iwlinks")
+
+parsedWikitext=parseWikitext(
+  text="[[foo]] [[WP:FOO]] [http://www.example.com/ baz]",
+  title="Wikipedia:Sandbox",
+  prop=c("text"),
+  curl=h)
+
+print(xmlInternalTreeParse(parsedWikitext, trim = TRUE))
+```
+Open Search 
+-----------
+```{r opensearch}
+#access wikipedia's opensearch - the api for doing search on wikipedia.
+open_search<-function(search_query,                             
+                               result_format="json",
+                               namespace="0",
+                               limit="40") 
+{
+
+  ## use RCurl to access the api
+  raw_data<-getForm("http://en.wikipedia.org/w/api.php", 
+               search  = search_query,
+               action  = "opensearch", 
+               format  = result_format,
+               namespace =namespace,
+               limit="40")
+  print(return(raw_data))
+  #todo explicitly grab the search results using fromJason on res and return a list of search values
+  data<- fromJSON(raw_data,
+                  encoding="utf-8",
+                  simplifyWithNames = TRUE)
+  return(data)               
+}
+
+#use open search with the query SQL
+open_search_example<-open_search("SQL")
+#display the results
+#note there is one exact match and servral partial matches
+open_search_example
+```
+Google Search
+-------------
+```{r google search,eval=FALSE}
+#do a google search - it is necceessary to do a google search
+#to complement a wikipedia based data quesy
+# here is an example.
+
+google<-function(query){
+
+  raw_data<-getForm("http://www.google.com/search",
+                  q ="RCurl",
+                  hl = "en", 
+                  ie = "ISO-8859-1", 
+                  oe = "ISO-8859-1",
+                  btnG = "Google+Search")
+  return(raw_data)
+  }
+google()
+````
