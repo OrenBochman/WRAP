@@ -14,8 +14,7 @@ WRAP <-
             e-mail= NA,     
           ),
           
-          public = list(
-            
+          public = list(        
             api = NA,
             version = "1.1",
             useragent = NA,
