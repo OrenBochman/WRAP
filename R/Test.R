@@ -49,3 +49,18 @@ expect_equal(w$process_JSON('[ [true, false, true], [1, 3, 4.15], ["a", "b", "de
 
 testXml<-"<api><edit result=\"Success\" pageid=\"16283969\" title=\"Wikipedia:Sandbox\" contentmodel=\"wikitext\" oldrevid=\"621914847\" newrevid=\"621916124\" newtimestamp=\"2014-08-19T13:57:23Z\"/></api>"
 expect_equal(w$process_XML(doc=testXml,"//api/edit","contentmodel"),"wikitext")
+
+#test getUserInfo
+properties = c("blockinfo",
+               #        "groups","implicitgroups","rights",
+               "editcount","registration",
+               "emailable","gender")
+
+res=w$getUserInfo(userNameList=c("Jimbo Wales","OrenBochman"),
+                  userPropList=properties)
+print(res)
+#print(res$query$users[[1]]$userid)
+#print(res$query$users[[1]]$name)
+#print(res$query$users[[1]]$editcount)
+#print(res$query$users[[1]]$registration)
+#print(res$query$users[[1]]$gender)
