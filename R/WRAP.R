@@ -144,6 +144,7 @@ WRAP <- R6Class("WRAP",
     }
     raw=postForm(uri=uri,
                  .params=.params,
+                 #assert=user,    make sure we are logged in
                  style=style,
                  curl=self$curl) 
     
