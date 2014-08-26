@@ -12,6 +12,7 @@ WRAP <- R6Class("WRAP",
     version = "1.0",
     useragent = NA,  
     curl=NA,
+    debug=TRUE,
     #ctor
     initialize = function(user,pass,email,api,curl=NA){
       if(file.exists("wrap.config"))
@@ -41,8 +42,8 @@ WRAP <- R6Class("WRAP",
         # proxypassword=pass,       #'whatever',
         # proxyport=port            #8080 
         
-        verbose = TRUE,             #debug 
-        # debugfunction = dfun,          
+        verbose = self$debug,       #debug 
+        #debugfunction = self$dfun,  #debug handler
         curl=self$curl              #handle is required
       )
       
@@ -50,6 +51,12 @@ WRAP <- R6Class("WRAP",
       #start up message
       self$greet()          
     },
+    set_debug=function(mode=TRUE){
+      self$debug=mode
+      curlSetOpt(verbose=mode,                 
+                 curl=self$curl)
+    },
+    
     set_api_uri=function(project="wikipedia",lang="en"){
       #todo check against legit wm wikis
       #todo add other wiki (if they support this api)
@@ -65,8 +72,13 @@ WRAP <- R6Class("WRAP",
     set_hair = function(val) {
       self$hair <- val
     },
+    #debugging support
+    dfun =function(msg, topic, curl){
+      cat(topic, ":", length(msg), "\n")
+      
+    },
     greet = function() {
-      cat(paste0("Hello, my name is ", self$name, ".\n"))
+      cat(paste0("Hello, my name is ", private$user, ".\n"))
     },
     github_parse = function(req){
       text <- content(req, as = "text")

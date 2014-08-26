@@ -59,8 +59,8 @@ properties = c("blockinfo",
 res=w$getUserInfo(userNameList=c("Jimbo Wales","OrenBochman"),
                   userPropList=properties)
 print(res)
-#print(res$query$users[[1]]$userid)
-#print(res$query$users[[1]]$name)
-#print(res$query$users[[1]]$editcount)
-#print(res$query$users[[1]]$registration)
-#print(res$query$users[[1]]$gender)
+expect_match((res$query$users[[1]]["userid"]),"24\\.000000")
+expect_match(res$query$users[[1]]["name"],"Jimbo Wales")
+expect_match(res$query$users[[1]]["editcount"],"11599.000000")
+expect_match(res$query$users[[1]]["registration"],"2001-03-27T20:47:31Z")
+expect_match(res$query$users[[1]]["gender"],"unknown")
