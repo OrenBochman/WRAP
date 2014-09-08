@@ -19,7 +19,6 @@ The primary goals are
 wikipedia api should include:
 -----------------------------
 #. [get site metadata](https://www.mediawiki.org/wiki/API:Meta)
-#. [login](https://www.mediawiki.org/wiki/API:Login) (done)
 #. [logout](https://www.mediawiki.org/wiki/API:Logout) (done)
 #. [account creation](https://www.mediawiki.org/wiki/API:Account_creation)
 #. get text of page (done)
@@ -1039,4 +1038,4 @@ google<-function(query){
   return(raw_data)
   }
 google()
-````
+```

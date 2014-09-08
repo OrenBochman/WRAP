@@ -28,11 +28,17 @@ expect_that(c("one" = 1, "two" = 2),is_equivalent_to(1:2))
 #            "12345678",h,
 #            .opts=c(debugfunction = dbg$update, verbose = TRUE))
 #
-w<-WRAP$new(user="P-value",pass="12345678",email="WRAP@gmail.com")
+w<-WRAP$new(user="P-value",
+            pass="12345678",
+            email="WRAP@gmail.com")
 
 expect_equal(w$pass, NULL)
 expect_equal(w$user, NULL)
 expect_equal(w$email, NULL)
+
+#testing set_api_uri
+expect_equal(w$set_api_uri(project="wikipedia",lang="en"),"https://en.wikipedia.org/w/api.php")
+expect_equal(w$set_api_uri(project="mediawiki",lang=""),"https://www.mediawiki.org/w/api.php")
 
 a <- list(1:10, letters)
 expect_that(str(a), prints_text("List of 2"))
@@ -52,15 +58,26 @@ expect_equal(w$process_XML(doc=testXml,"//api/edit","contentmodel"),"wikitext")
 
 #test getUserInfo
 properties = c("blockinfo",
-               #        "groups","implicitgroups","rights",
-               "editcount","registration",
-               "emailable","gender")
-
-res=w$getUserInfo(userNameList=c("Jimbo Wales","OrenBochman"),
-                  userPropList=properties)
-print(res)
-expect_match((res$query$users[[1]]["userid"]),"24\\.000000")
-expect_match(res$query$users[[1]]["name"],"Jimbo Wales")
-expect_match(res$query$users[[1]]["editcount"],"11599.000000")
-expect_match(res$query$users[[1]]["registration"],"2001-03-27T20:47:31Z")
-expect_match(res$query$users[[1]]["gender"],"unknown")
+               "groups",
+               #"implicitgroups",
+               "rights",
+               "editcount",
+               "registration",
+               "emailable",
+               "gender")
+if(TRUE)
+{
+  res=w$getUserInfo(uri="https://en.wikipedia.org/w/api.php",
+                    userNameList=c("Jimbo Wales","OrenBochman"),
+                    userPropList=properties)
+  print(res)
+  expect_match((res$query$users[[1]]["userid"]),"24")
+  expect_match(res$query$users[[1]]["name"],"Jimbo Wales")
+  expect_more_than(as.numeric(res$query$users[[1]]["editcount"]),11599)
+  expect_match(res$query$users[[1]]["registration"],"2001-03-27T20:47:31Z")
+  expect_match(res$query$users[[1]]["gender"],"unknown")
+}
+#testing getTokens
+editToken=w$getTokens(uri=w$set_api_uri(project="wikipedia",
+                                        lang="en"))
+print(editToken)

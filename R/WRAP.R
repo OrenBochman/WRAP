@@ -155,11 +155,12 @@ WRAP <- R6Class("WRAP",
                        userNameList,
                        userPropList,
                        responseFormat="json"){
-    #responseFormat="json" #|"xml"
+    
+    if(self$debug)print("getUserInfo()")
     .params = list(action="query",list="users",  
-                    ususers=paste(userNameList, collapse = "|"),
-                    usprop=paste(userPropList, collapse = "|"),
-                    format=responseFormat)
+                   ususers=paste(userNameList, collapse = "|"),
+                   usprop=paste(userPropList, collapse = "|"),
+                   format=responseFormat)
     #query
     raw=self$doPost(uri=uri,.params=.params,style="post") 
     #parse the result
@@ -168,13 +169,29 @@ WRAP <- R6Class("WRAP",
       doc=xmlInternalTreeParse(raw, trim = TRUE)
     }else{
       doc=self$process_JSON(doc=raw)
-    }      
-  
+    }  
+  },
+  getTokens=function(uri=setApiUri(project="mediawiki"),
+                     responseFormat="xml",
+                     curl)
+  {
+    if(self$debug)print("getUserInfo()")
+    .params=list(action="tokens",
+                 responseFormat="xml")
+    #.opts<-curlOptions(curl=curl)  
+    #get edit token
+    raw=self$doPost(uri=uri,.params=.params,style="post")
+    #parse the result
+    if(responseFormat=="xml")   
+    {  
+      editToken=self$process_XML(doc=raw,xpath="//api/tokens",attribute="edittoken")
+      #doc=xmlInternalTreeParse(raw, trim = TRUE)
+    }else{
+      editToken=self$process_JSON(doc=raw)
+    }  
   }
 ),
-  
-
-  private = list(
+private = list(
     user = NA,
     pass = NA,
     email= NA,  
