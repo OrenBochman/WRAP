@@ -185,10 +185,15 @@ WRAP <- R6Class("WRAP",
     if(responseFormat=="xml")   
     {  
       editToken=self$process_XML(doc=raw,xpath="//api/tokens",attribute="edittoken")
-      #doc=xmlInternalTreeParse(raw, trim = TRUE)
-    }else{
-      editToken=self$process_JSON(doc=raw)
-    }  
+    }
+    if(responseFormat=="json")   
+    {  
+        editToken=self$process_JSON(doc=raw)
+    }
+    if(responseFormat=="raw")   
+    {
+      editToken=raw
+    }
   }
 ),
 private = list(
