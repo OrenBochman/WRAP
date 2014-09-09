@@ -248,7 +248,11 @@ getTokens<-function(uri=setApiUri(project="mediawiki"),curl)
   .params<-list(action="tokens",format="xml")
   #.opts<-curlOptions(curl=curl)  
   #get edit token
-  doc=postForm(uri=uri,.params=.params,curl=curl,style="post")
+  doc=postForm(uri=uri,
+               .params=.params,
+               curl=curl,
+               style="post")
+
   editToken<-processXML(doc=doc,xpath="//api/tokens",attribute="edittoken")
   return(editToken)
 }
