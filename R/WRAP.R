@@ -159,41 +159,68 @@ WRAP <- R6Class("WRAP",
     if(self$debug)print("getUserInfo()")
     .params = list(action="query",list="users",  
                    ususers=paste(userNameList, collapse = "|"),
-                   usprop=paste(userPropList, collapse = "|"),
+                   usprop= paste(userPropList, collapse = "|"),
                    format=responseFormat)
     #query
     raw=self$doPost(uri=uri,.params=.params,style="post") 
     #parse the result
-    if(responseFormat=="xml")   
-    {          
+    if(responseFormat=="xml"){
       doc=xmlInternalTreeParse(raw, trim = TRUE)
     }else{
       doc=self$process_JSON(doc=raw)
     }  
   },
-  getTokens=function(uri=setApiUri(project="mediawiki"),
-                     responseFormat="xml",
-                     curl)
-  {
-    if(self$debug)print("getUserInfo()")
-    .params=list(action="tokens",
-                 responseFormat="xml")
+  
+  
+  getTokens=function(uri="",responseFormat="xml"){
+    
+    if(self$debug)print("getTokens()")
+    
+    .params=list(action="query",
+                 meta="tokens",
+                 type="csrf|watch|patrol",
+                 format=responseFormat)
     #.opts<-curlOptions(curl=curl)  
     #get edit token
     raw=self$doPost(uri=uri,.params=.params,style="post")
     #parse the result
-    if(responseFormat=="xml")   
-    {  
-      editToken=self$process_XML(doc=raw,xpath="//api/tokens",attribute="edittoken")
+    editToken=raw
+    if(responseFormat=="xml"){  
+      editToken=self$process_XML(doc=raw,
+                                 xpath="//api/query/tokens",
+                                 attribute="csrftoken")
     }
-    if(responseFormat=="json")   
-    {  
-        editToken=self$process_JSON(doc=raw)
+    else if(responseFormat=="json"){  
+      editToken=self$process_JSON(doc=raw)
     }
-    if(responseFormat=="raw")   
-    {
-      editToken=raw
-    }
+    return(editToken)
+  },
+ 
+  
+  login=function(uri="",name,password,responseFormat="xml"){
+    
+    if(self$debug)print("login()")
+    .params= list(action="login",  
+                lgname=name,
+                lgpassword=password,
+                format="xml")  
+
+    #step 1 login
+    x1=self$doPost(uri=uri,.params=.params) 
+    #extract token attrib
+    token<-self$process_XML(doc=x1,xpath="//api/login",attribute="token")
+    
+    #step 2 login check
+    .params <-c(.params,lgtoken=token)           
+    #add token to request
+    x2=self$doPost(uri=uri,.params=.params,style="post")
+    #extract result attrib  
+    result<-self$process_XML(doc=x2,xpath="//api/login",attribute="result")
+    
+    retValue <- list(result=result,token=token)
+    if(result!="Success")
+      print(paste("login failed with message",result))
+    return(retValue)
   }
 ),
 private = list(

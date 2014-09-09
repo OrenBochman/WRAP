@@ -57,27 +57,71 @@ testXml<-"<api><edit result=\"Success\" pageid=\"16283969\" title=\"Wikipedia:Sa
 expect_equal(w$process_XML(doc=testXml,"//api/edit","contentmodel"),"wikitext")
 
 #test getUserInfo
-properties = c("blockinfo",
-               "groups",
-               #"implicitgroups",
+properties = c("userid",
+               "name",
+               "blockinfo",               
+               "implicitgroups",
                "rights",
+               "userid",
                "editcount",
                "registration",
-               "emailable",
+               "groups",
+               "emailable",         
                "gender")
-if(TRUE)
-{
+
+
   res=w$getUserInfo(uri="https://en.wikipedia.org/w/api.php",
-                    userNameList=c("Jimbo Wales","OrenBochman"),
+                    userNameList=c("OrenBochman"),
                     userPropList=properties)
-  print(res)
+  expect_match((res$query$users[[1]]["userid"]),"1526134")
+  expect_match((res$query$users[[1]]["name"]),"OrenBochman")
+  expect_match((res$query$users[[1]]["registration"]),"2006-05-29T22:11:46Z")
+  expect_match((res$query$users[[1]]["gender"]),"unknown")
+  expect_match((res$query$users[[1]]["emailable"]),"")
+  expect_more_than(as.numeric(res$query$users[[1]]["editcount"]),12591)
+ #print(res$query$users[[1]]["editcount"]) 
+
+  expect_match((res$query$users[[1]]["groups"]),"user")
+  expect_match((res$query$users[[1]]["groups"]),"autoconfirmed")
+  expect_match((res$query$users[[1]]["groups"]),"*")
+ # expect_match((res$query$users[[1]]["groups"]),"founder")
+
+#  print(res$query$users[[1]]["groups"]) 
+
+  #expect_match((res$query$users[[1]]["editcount"]),"12592")
+
+res=w$getUserInfo(uri="https://en.wikipedia.org/w/api.php",
+                    userNameList=c("Jimbo Wales"),                  
+                    userPropList=properties)
+ # print(res)
   expect_match((res$query$users[[1]]["userid"]),"24")
   expect_match(res$query$users[[1]]["name"],"Jimbo Wales")
   expect_more_than(as.numeric(res$query$users[[1]]["editcount"]),11599)
-  expect_match(res$query$users[[1]]["registration"],"2001-03-27T20:47:31Z")
-  expect_match(res$query$users[[1]]["gender"],"unknown")
-}
+  expect_that(res$query$users[[1]]["registration"],matches("2001-03-27T20:47:31Z"))
+  expect_that(res$query$users[[1]]["gender"],matches("unknown"))
+  #print(res$query$users[[1]]["groups"])
+  expect_that(res$query$users[[1]]["groups"],matches("user"))
+  expect_that(res$query$users[[1]]["groups"],matches("autoconfirmed"))
+  expect_that(res$query$users[[1]]["groups"],matches("*"))
+  expect_that(res$query$users[[1]]["groups"],matches("founder"))
+  expect_that(res$query$users[[1]]["groups"],matches("oversight"))
+  expect_that(res$query$users[[1]]["groups"],matches("sysop"))
+  expect_that(res$query$users[[1]]["groups"],matches("checkuser"),"has checkuser")
+
+login=w$login(uri="https://en.wikipedia.org/w/api.php",
+              name="P-value",
+              password="12345678")
+expect_that(login["result"],matches("Success"))
+
+
+if(FALSE){
 #testing getTokens
-editToken=w$getTokens(uri=w$set_api_uri(project="wikipedia",
-                                        lang="en"))
+editToken=w$getTokens(uri="https://en.wikipedia.org/w/api.php",
+                      responseFormat="xml")
+
+
 print(editToken)
+
+
+}
+
