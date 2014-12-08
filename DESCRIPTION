@@ -1,9 +1,11 @@
 Package: WRAP
 Type: Package
-Title: Access MediaWiki APIs
+Title: Access MediaWiki API ver 1.24
 Version: 1.0
 Date: 2014-08-24
 Author: Oren BOchman
 Maintainer: <OrenBochman@gmail.com>
 Description: More about what it does (maybe more than one line)
 License: GPL?
+Depends: R6, RCurl, XML, RJSONIO
+Suggests: testthat
