@@ -1,6 +1,7 @@
-library("testthat") 
+library(testthat)
+library(WRAP)
 
-setwd("~/Documents/R/WRAP")
+#setwd("~/Documents/R/WRAP")
 #setup
 source("R/WRAP.R")
 #test_file("Test.R")
