@@ -1,11 +1,13 @@
 Package: WRAP
-Type: Package
-Title: Access MediaWiki API ver 1.24
 Version: 1.0
+Type: Package
+Title: Access MediaWiki API ver 1.24+
 Date: 2014-08-24
-Author: Oren BOchman
-Maintainer: <OrenBochman@gmail.com>
-Description: More about what it does (maybe more than one line)
-License: GPL?
+Authors@R: c(person("Oren Bochman", role=c("aut","cre"),
+                    email="OrenBochman@gmail.com"))
+Author: Oren Bochman
+Maintainer: Oren Bochman <OrenBochman@gmail.com>
 Depends: R6, RCurl, XML, RJSONIO
 Suggests: testthat
+Description: More about what it does (maybe more than one line)
+License: GPL (>=2)
