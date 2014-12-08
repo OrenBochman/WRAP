@@ -1,9 +1,8 @@
 library(testthat)
-library(WRAP)
+#library(WRAP)
 
-#setwd("~/Documents/R/WRAP")
-#setup
-source("R/WRAP.R")
+setwd("~/Documents/R/WRAP/R")
+source("WRAP.R")
 #test_file("Test.R")
 
 #testing functions
@@ -115,14 +114,14 @@ login=w$login(uri="https://en.wikipedia.org/w/api.php",
 expect_that(login["result"],matches("Success"))
 
 
-if(FALSE){
+
 #testing getTokens
 editToken=w$getTokens(uri="https://en.wikipedia.org/w/api.php",
                       responseFormat="xml")
 
 
 print(editToken)
-
+if(FALSE){
 
 }
 

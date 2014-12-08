@@ -12,7 +12,7 @@ WRAP <- R6Class("WRAP",
     version = "1.0",
     useragent = NA,  
     curl=NA,
-    debug=TRUE,
+    debug=FALSE,
     #ctor
     initialize = function(user,pass,email,api,curl=NA){
       if(file.exists("wrap.config"))
@@ -218,7 +218,7 @@ WRAP <- R6Class("WRAP",
     result<-self$process_XML(doc=x2,xpath="//api/login",attribute="result")
     
     retValue <- list(result=result,token=token)
-    if(result!="Success")
+    if(result!="Success" && self$debug)
       print(paste("login failed with message",result))
     return(retValue)
   }
