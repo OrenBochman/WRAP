@@ -28,9 +28,8 @@ expect_that(c("one" = 1, "two" = 2),is_equivalent_to(1:2))
 #            "12345678",h,
 #            .opts=c(debugfunction = dbg$update, verbose = TRUE))
 #
-w<-WRAP$new(user="P-value",
-            pass="12345678",
-            email="WRAP@gmail.com")
+#w<-WRAP$new(user="P-value",pass="12345678",url="https://en.wikipedia.org/w/api.php",email="WRAP@gmail.com")
+w<-WRAP$new()
 
 expect_equal(w$pass, NULL)
 expect_equal(w$user, NULL)
@@ -111,16 +110,15 @@ res=w$getUserInfo(uri="https://en.wikipedia.org/w/api.php",
 login=w$login(uri="https://en.wikipedia.org/w/api.php",
               name="P-value",
               password="12345678")
-expect_that(login["result"],matches("Success"))
-
-
+expect_that(login["result"],matches("Success"),info = "login is a success")
 
 #testing getTokens
 editToken=w$getTokens(uri="https://en.wikipedia.org/w/api.php",
                       responseFormat="xml")
 
 
-print(editToken)
+print(paste("editToken:", editToken))
+
 if(FALSE){
 
 }

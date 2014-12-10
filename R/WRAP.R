@@ -3,34 +3,37 @@ library("RCurl")   #Web Api
 library("XML")     #Processing
 library("RJSONIO") #processing
 
-#CURRENT: use case - onne wiki available per instance  OR
-#TODO:    use case - multiple wikis available per instance per wiki!
-
 WRAP <- R6Class("WRAP",
-  public = list(        
+# PUBLIC
+#
+  public = list(
     api = NA,
     version = "1.0",
     useragent = NA,  
-    curl=NA,
     debug=FALSE,
+    curl=NA,
+    
+    #
     #ctor
-    initialize = function(user,pass,email,api,curl=NA){
-      if(file.exists("wrap.config"))
-        init_from_file("wrap.conf")
-      else{
-        #TODO: code me
-      }              
-      #set ctor params
-      if (!missing(api))    self$api=api
-      else                  self$api=self$set_api_uri()        
-      if (!missing(user))   private$user=user        
-      if (!missing(pass))   private$pass=pass              
-      if (!missing(email))  private$email=email
-      if (!missing(curl))   self$curl=curl
-      else                  self$curl=getCurlHandle()  
+    #
+    initialize = function(api,curl=NA){
+      if(file.exists("user.R"))
+        self$init_from_file("user.R")   #load config from file
+      else
+        self$init_interactive("user.R") #get config interactively
+
+      if(!missing(api))
+        self$api=api
+      else              
+        self$api=self$set_api_uri()        
+      
+      if(!missing(curl))
+        self$curl=curl
+      else                  
+        self$curl=getCurlHandle()
       
       #a wmf complient user agent
-      self$useragent = paste("WRAP",self$ver,"contact: ",self$email)
+      self$useragent = paste("WRAP",self$ver,"contact: ",private$user$email)
       #set global curl options
       curlSetOpt(
         cookiejar="cookies.txt",    #store cookies, 
@@ -40,17 +43,45 @@ WRAP <- R6Class("WRAP",
         # proxy=proxy,              #"136.233.91.120",
         # proxyusername=name,       #"mydomain\\myusername",  
         # proxypassword=pass,       #'whatever',
-        # proxyport=port            #8080 
-        
+        # proxyport=port            #8080     
         verbose = self$debug,       #debug 
         #debugfunction = self$dfun,  #debug handler
         curl=self$curl              #handle is required
-      )
-      
+      )      
       #self$getMyLimits()
       #start up message
       self$greet()          
     },
+    
+    #
+    #init configuration interactively and save to file
+    #
+    init_interactive=function(file_name="user.R"){
+        
+      name = readline(prompt="Enter your username: ")
+      print(paste("name: ",name))
+        
+      password = readline(prompt="Enter your password: ")
+      print(paste("password: ",password))
+        
+      url = readline(prompt="Enter your wiki's base url: ")
+      print(paste("url: ",url))
+      
+      email= readline(prompt="Enter your email: ",)
+      print(paste("email: ",email))          
+      
+      private$user=data.frame(name,password,url,email)
+      print(paste("writing (to file: ",file_name))
+      write.table(private$user,file_name,col.names=TRUE)        
+    },
+    
+    #
+    #init configuration from a file
+    #
+    init_from_file=function(file_name="user.R"){
+        private$user<-read.table(file=file_name,header=TRUE)        
+    },
+    
     set_debug=function(mode=TRUE){
       self$debug=mode
       curlSetOpt(verbose=mode,                 
@@ -68,23 +99,27 @@ WRAP <- R6Class("WRAP",
       }
       return(uri)
     },                      
-    init_from_file=function(val){},
-    set_hair = function(val) {
-      self$hair <- val
-    },
+    
+    
     #debugging support
     dfun =function(msg, topic, curl){
       cat(topic, ":", length(msg), "\n")
       
     },
+
     greet = function() {
-      cat(paste0("Hello, my name is ", private$user, ".\n"))
+      cat(paste0("Hello, ", private$user$name, ".\n"))
+      cat(paste0("email: ", private$user$email, ".\n"))
+      cat(paste0("url: ", private$user$url, ".\n"))
+  
     },
+    
     github_parse = function(req){
       text <- content(req, as = "text")
       if (identical(text, "")) stop("Not output to parse", call. = FALSE)
       jsonlite::fromJSON(text, simplifyVector = FALSE)
     },            
+    
     process_JSON=function(doc){
       result = tryCatch({
         fromJSON(I(doc), simplify = TRUE) 
@@ -100,6 +135,7 @@ WRAP <- R6Class("WRAP",
         
       })        
     },#END tryCatch
+    
     process_XML=function(doc,xpath,attribute){
       result = tryCatch({  
         res =xmlInternalTreeParse(doc, trim = TRUE)
@@ -129,16 +165,15 @@ WRAP <- R6Class("WRAP",
       return(result)
     },#END tryCatch
     #getUserInfo
+    
   getMyLimits=function(uri){ 
     max_lag=5 #TODO lookup
   },
   
-  
+  #
   #doPost
-  doPost=function(uri,
-                  .params,
-                  style="post"){
-  
+  #
+  doPost=function(uri, .params, style="post"){
     if(nchar(uri)==0){
       uri=self$api
     }
@@ -146,8 +181,7 @@ WRAP <- R6Class("WRAP",
                  .params=.params,
                  #assert=user,    make sure we are logged in
                  style=style,
-                 curl=self$curl) 
-    
+                 curl=self$curl)
   },
   
   #getUserInfo
@@ -161,26 +195,23 @@ WRAP <- R6Class("WRAP",
                    ususers=paste(userNameList, collapse = "|"),
                    usprop= paste(userPropList, collapse = "|"),
                    format=responseFormat)
-    #query
-    raw=self$doPost(uri=uri,.params=.params,style="post") 
-    #parse the result
-    if(responseFormat=="xml"){
+    raw=self$doPost(uri=uri,.params=.params,style="post")  #query
+    if(responseFormat=="xml"){  #parse the result
       doc=xmlInternalTreeParse(raw, trim = TRUE)
     }else{
       doc=self$process_JSON(doc=raw)
     }  
   },
   
-  
+  #
+  #getTokens
+  #  
   getTokens=function(uri="",responseFormat="xml"){
-    
-    if(self$debug)print("getTokens()")
-    
+  if(self$debug)print("getTokens()")
     .params=list(action="query",
                  meta="tokens",
                  type="csrf|watch|patrol",
                  format=responseFormat)
-    #.opts<-curlOptions(curl=curl)  
     #get edit token
     raw=self$doPost(uri=uri,.params=.params,style="post")
     #parse the result
@@ -196,9 +227,10 @@ WRAP <- R6Class("WRAP",
     return(editToken)
   },
  
-  
-  login=function(uri="",name,password,responseFormat="xml"){
-    
+  #
+  #login
+  #  
+  login=function(uri="",name,password,responseFormat="xml"){ 
     if(self$debug)print("login()")
     .params= list(action="login",  
                 lgname=name,
@@ -222,10 +254,13 @@ WRAP <- R6Class("WRAP",
       print(paste("login failed with message",result))
     return(retValue)
   }
-),
-private = list(
+  ),
+  #
+  # private
+  # 
+  
+  private = list(
     user = NA,
-    pass = NA,
-    email= NA,  
-    max_lag = NA)
+    max_lag = 1 #in seconds),
+  )#private
 )#class
